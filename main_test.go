@@ -33,3 +33,13 @@ func TestPedersenCommitment(t *testing.T) {
 		panic(err)
 	}
 }
+
+func TestPedersenCommitmentFails(t *testing.T) {
+	x, y := Curve.ScalarBaseMult(big.NewInt(123456).Bytes())
+	H := Point{x, y}
+
+	_, _, _, err := CreatePedersenCommitment(H, 128, 5)
+	if err == nil {
+		panic("Should fail")
+	}
+}
