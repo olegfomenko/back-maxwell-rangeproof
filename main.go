@@ -11,12 +11,23 @@ import (
 	"github.com/ethereum/go-ethereum/crypto/secp256k1"
 )
 
-var Base = big.NewInt(2)
-var Minus1 = big.NewInt(-1)
+// Curve - the curve we are working on
 var Curve = secp256k1.S256()
+
+// Hash function that should return the value in Curve.N field
+var Hash func(...[]byte) *big.Int = defaultHash
+
+// defaultHash - default hash function Keccak256
+func defaultHash(bytes ...[]byte) *big.Int {
+	return new(big.Int).Mod(new(big.Int).SetBytes(eth.Keccak256(bytes...)), Curve.Params().N)
+}
 
 type Point struct {
 	X, Y *big.Int
+}
+
+func (p *Point) String() string {
+	return fmt.Sprintf("Elliptic Point[x: %s | y: %s]", p.X.String(), p.Y.String())
 }
 
 type Proof struct {
@@ -26,6 +37,7 @@ type Proof struct {
 	N  int
 }
 
+// PedersenCommitment creates Point with pedersen commitment aH + rG
 func PedersenCommitment(H Point, a, r *big.Int) Point {
 	aHx, aHy := Curve.ScalarMult(H.X, H.Y, a.Bytes())
 	rGx, rGY := Curve.ScalarBaseMult(r.Bytes())
@@ -37,8 +49,8 @@ func PedersenCommitment(H Point, a, r *big.Int) Point {
 	}
 }
 
+// VerifyPedersenCommitment - verifies proof that C commitment commits the value in [0..2^n-1]
 func VerifyPedersenCommitment(H Point, C Point, proof Proof) error {
-	fmt.Println("Verification")
 	var R []Point
 
 	for i := 0; i < proof.N; i++ {
@@ -50,30 +62,20 @@ func VerifyPedersenCommitment(H Point, C Point, proof Proof) error {
 		x, y = Curve.Add(proof.C[i].X, proof.C[i].Y, x, y)
 		x, y = Curve.ScalarMult(x, y, minus(proof.E0).Bytes())
 		x, y = Curve.Add(x, y, siG.X, siG.Y)
-		ei := HashPoints(Point{x, y})
-
-		fmt.Println("ei #" + fmt.Sprint(i) + " " + ei.String())
+		ei := hashPoints(Point{x, y})
 
 		x, y = Curve.ScalarMult(proof.C[i].X, proof.C[i].Y, ei.Bytes())
 		R = append(R, Point{x, y})
 	}
 
-	//fmt.Println("R: ")
-	//for _, r := range R {
-	//	fmt.Println(r.X.String() + " " + r.Y.String())
-	//}
-
 	// eo_ = Hash(Ro||R1||...Rn-1)
-	e0_ := HashPoints(R...)
+	e0_ := hashPoints(R...)
 
 	// C = sum(Ci)
 	x, y := proof.C[0].X, proof.C[0].Y
 	for i := 1; i < proof.N; i++ {
 		x, y = Curve.Add(x, y, proof.C[i].X, proof.C[i].Y)
 	}
-
-	//fmt.Println("e0: " + proof.E0.String())
-	//fmt.Println("e0_: " + e0_.String())
 
 	if e0_.Cmp(proof.E0) != 0 {
 		return errors.New("e0 != e0_")
@@ -86,6 +88,9 @@ func VerifyPedersenCommitment(H Point, C Point, proof Proof) error {
 	return nil
 }
 
+// CreatePedersenCommitment - creates Pedersen commitment for given val, and
+// generates proof that given val lies in [0..2^n-1].
+// Returns Proof, generated commitment and private key in case of success generation.
 func CreatePedersenCommitment(H Point, val uint64, n int) (Proof, Point, *big.Int, error) {
 	// Converting into bit representation
 	bitsStr := strconv.FormatUint(val, 2)
@@ -102,8 +107,6 @@ func CreatePedersenCommitment(H Point, val uint64, n int) (Proof, Point, *big.In
 	for len(bits) < n {
 		bits = append(bits, false)
 	}
-
-	fmt.Println(bits)
 
 	prv := big.NewInt(0)
 	var r []*big.Int
@@ -133,9 +136,7 @@ func CreatePedersenCommitment(H Point, val uint64, n int) (Proof, Point, *big.In
 
 			// Hash(ki*G)
 			x, y := Curve.ScalarBaseMult(ki.Bytes())
-			ei := HashPoints(Point{x, y})
-
-			fmt.Println("Hash(ki*G) #" + fmt.Sprint(i) + " " + ei.String())
+			ei := hashPoints(Point{x, y})
 
 			// Ri = Hash(ki*G)*Ci
 			x, y = Curve.ScalarMult(Ci.X, Ci.Y, ei.Bytes())
@@ -165,13 +166,8 @@ func CreatePedersenCommitment(H Point, val uint64, n int) (Proof, Point, *big.In
 		r = append(r, nil)
 	}
 
-	//fmt.Println("R: ")
-	//for _, r := range R {
-	//	fmt.Println(r.X.String() + " " + r.Y.String())
-	//}
-
 	// eo = Hash(Ro||R1||...Rn-1)
-	e0 := HashPoints(R...)
+	e0 := hashPoints(R...)
 
 	var s []*big.Int
 
@@ -189,9 +185,7 @@ func CreatePedersenCommitment(H Point, val uint64, n int) (Proof, Point, *big.In
 		}
 
 		// ei = Hash(ki*G + e0*2^i*H)
-		ei := HashPoints(PedersenCommitment(H, mul(e0, pow2(i)), ki))
-
-		fmt.Println("ei #" + fmt.Sprint(i) + " " + ei.String())
+		ei := hashPoints(PedersenCommitment(H, mul(e0, pow2(i)), ki))
 
 		// Ci = Ri /ei = (ki0/ei)*G
 		ei_inverse := new(big.Int).ModInverse(ei, Curve.Params().N)
@@ -230,18 +224,14 @@ func mul(x *big.Int, y *big.Int) *big.Int {
 }
 
 func pow2(i int) *big.Int {
-	return new(big.Int).Exp(Base, big.NewInt(int64(i)), Curve.Params().N)
+	return new(big.Int).Exp(big.NewInt(2), big.NewInt(int64(i)), Curve.Params().N)
 }
 
 func minus(val *big.Int) *big.Int {
-	return new(big.Int).Mul(val, big.NewInt(-1))
+	return new(big.Int).Mod(new(big.Int).Mul(val, big.NewInt(-1)), Curve.Params().N)
 }
 
-func Hash(bytes ...[]byte) *big.Int {
-	return new(big.Int).Mod(new(big.Int).SetBytes(eth.Keccak256(bytes...)), Curve.Params().N)
-}
-
-func HashPoints(points ...Point) *big.Int {
+func hashPoints(points ...Point) *big.Int {
 	var data [][]byte
 	for _, p := range points {
 		data = append(data, p.X.Bytes())
