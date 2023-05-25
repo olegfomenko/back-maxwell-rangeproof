@@ -9,9 +9,9 @@ Use only for educational reasons.
 __DO NOT USE IN PRODUCTION.__ 
 
 ## Usage
-Explore [main_test.go](./main_test.go) TestPedersenCommitment with example of usage.
+Explore [main_test.go](./main_test.go) `TestPedersenCommitment` with example of usage.
 
-Note, that there are wht following values defined in global space to be changed on your choice:
+Note, that there are the following values defined in global space to be changed on your choice:
 
 ```go
 // Curve - the curve we are working on
