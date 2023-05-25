@@ -38,6 +38,7 @@ func PedersenCommitment(H Point, a, r *big.Int) Point {
 }
 
 func VerifyPedersenCommitment(H Point, C Point, proof Proof) error {
+	fmt.Println("Verification")
 	var R []Point
 
 	for i := 0; i < proof.N; i++ {
@@ -45,17 +46,22 @@ func VerifyPedersenCommitment(H Point, C Point, proof Proof) error {
 		x, y := Curve.ScalarBaseMult(proof.S[i].Bytes())
 		siG := Point{x, y}
 
-		x, y = Curve.ScalarMult(H.X, H.Y, pow2(i).Bytes())
-		x, y = Curve.ScalarMult(x, y, Minus1.Bytes())
+		x, y = Curve.ScalarMult(H.X, H.Y, minus(pow2(i)).Bytes())
 		x, y = Curve.Add(proof.C[i].X, proof.C[i].Y, x, y)
-		x, y = Curve.ScalarMult(x, y, proof.E0.Bytes())
-		x, y = Curve.ScalarMult(x, y, Minus1.Bytes())
+		x, y = Curve.ScalarMult(x, y, minus(proof.E0).Bytes())
 		x, y = Curve.Add(x, y, siG.X, siG.Y)
 		ei := HashPoints(Point{x, y})
+
+		fmt.Println("ei #" + fmt.Sprint(i) + " " + ei.String())
 
 		x, y = Curve.ScalarMult(proof.C[i].X, proof.C[i].Y, ei.Bytes())
 		R = append(R, Point{x, y})
 	}
+
+	//fmt.Println("R: ")
+	//for _, r := range R {
+	//	fmt.Println(r.X.String() + " " + r.Y.String())
+	//}
 
 	// eo_ = Hash(Ro||R1||...Rn-1)
 	e0_ := HashPoints(R...)
@@ -66,8 +72,8 @@ func VerifyPedersenCommitment(H Point, C Point, proof Proof) error {
 		x, y = Curve.Add(x, y, proof.C[i].X, proof.C[i].Y)
 	}
 
-	fmt.Println("e0: " + proof.E0.String())
-	fmt.Println("e0_: " + e0_.String())
+	//fmt.Println("e0: " + proof.E0.String())
+	//fmt.Println("e0_: " + e0_.String())
 
 	if e0_.Cmp(proof.E0) != 0 {
 		return errors.New("e0 != e0_")
@@ -129,6 +135,8 @@ func CreatePedersenCommitment(H Point, val uint64, n int) (Proof, Point, *big.In
 			x, y := Curve.ScalarBaseMult(ki.Bytes())
 			ei := HashPoints(Point{x, y})
 
+			fmt.Println("Hash(ki*G) #" + fmt.Sprint(i) + " " + ei.String())
+
 			// Ri = Hash(ki*G)*Ci
 			x, y = Curve.ScalarMult(Ci.X, Ci.Y, ei.Bytes())
 			R = append(R, Point{
@@ -157,6 +165,11 @@ func CreatePedersenCommitment(H Point, val uint64, n int) (Proof, Point, *big.In
 		r = append(r, nil)
 	}
 
+	//fmt.Println("R: ")
+	//for _, r := range R {
+	//	fmt.Println(r.X.String() + " " + r.Y.String())
+	//}
+
 	// eo = Hash(Ro||R1||...Rn-1)
 	e0 := HashPoints(R...)
 
@@ -164,7 +177,7 @@ func CreatePedersenCommitment(H Point, val uint64, n int) (Proof, Point, *big.In
 
 	for i := 0; i < n; i++ {
 		if bits[i] {
-			// si = ki + e0*2^i
+			// si = ki + e0*r^i
 			si := add(k[i], mul(e0, r[i]))
 			s = append(s, si)
 			continue
@@ -175,12 +188,14 @@ func CreatePedersenCommitment(H Point, val uint64, n int) (Proof, Point, *big.In
 			return Proof{}, Point{}, nil, err
 		}
 
-		// ei = Hash((ki*G + e0*2^i*H)
+		// ei = Hash(ki*G + e0*2^i*H)
 		ei := HashPoints(PedersenCommitment(H, mul(e0, pow2(i)), ki))
+
+		fmt.Println("ei #" + fmt.Sprint(i) + " " + ei.String())
 
 		// Ci = Ri /ei = (ki0/ei)*G
 		ei_inverse := new(big.Int).ModInverse(ei, Curve.Params().N)
-		x, y := Curve.ScalarBaseMult(mul(k[i], ei_inverse).Bytes())
+		x, y := Curve.ScalarMult(R[i].X, R[i].Y, ei_inverse.Bytes())
 		C[i] = Point{x, y}
 
 		prv = add(prv, mul(k[i], ei_inverse))
@@ -216,6 +231,10 @@ func mul(x *big.Int, y *big.Int) *big.Int {
 
 func pow2(i int) *big.Int {
 	return new(big.Int).Exp(Base, big.NewInt(int64(i)), Curve.Params().N)
+}
+
+func minus(val *big.Int) *big.Int {
+	return new(big.Int).Mul(val, big.NewInt(-1))
 }
 
 func Hash(bytes ...[]byte) *big.Int {
