@@ -28,8 +28,7 @@ func TestPedersenCommitment(t *testing.T) {
 
 	fmt.Println("Private Key: " + hexutil.Encode(prv.Bytes()))
 
-	err = VerifyPedersenCommitment(H, commitment, proof)
-	if err != nil {
+	if err = VerifyPedersenCommitment(H, commitment, proof); err != nil {
 		panic(err)
 	}
 }
@@ -41,5 +40,28 @@ func TestPedersenCommitmentFails(t *testing.T) {
 	_, _, _, err := CreatePedersenCommitment(H, 128, 5)
 	if err == nil {
 		panic("Should fail")
+	}
+}
+
+func TestSignatureForCommitments(t *testing.T) {
+	x, y := Curve.ScalarBaseMult(big.NewInt(123456).Bytes())
+	H := ECPoint{x, y}
+
+	proofAlice, commitmentAlice, keyAlice, err := CreatePedersenCommitment(H, 10, 5)
+	if err != nil {
+		panic(err)
+	}
+
+	if err := VerifyPedersenCommitment(H, commitmentAlice, proofAlice); err != nil {
+		panic(err)
+	}
+
+	signature, err := Sign(keyAlice, big.NewInt(10), Hash([]byte("12345")), H, commitmentAlice)
+	if err != nil {
+		panic(err)
+	}
+
+	if err := Verify(signature, H, commitmentAlice); err != nil {
+		panic(err)
 	}
 }

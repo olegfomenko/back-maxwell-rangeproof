@@ -20,3 +20,12 @@ var Curve = secp256k1.S256()
 // Hash function that should return the value in Curve.N field
 var Hash func(...[]byte) *big.Int = defaultHash
 ```
+
+## Signature
+Explore [main_test.go](./main_test.go) `TestSignatureForCommitments` with example of signing the Pederssn commitment.
+
+It uses the scheme from [Simple Schnorr Signature with Pedersen Commitment as Key](https://eprint.iacr.org/2020/061.pdf) article.
+
+<img src="./signing.jpg" alt="Signing scheme"/>
+
+For the decentralized systems hash message expected to be the hash of transaction outputs.
