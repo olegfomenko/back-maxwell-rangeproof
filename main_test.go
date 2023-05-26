@@ -15,7 +15,7 @@ func TestBitRepresentation(t *testing.T) {
 
 func TestPedersenCommitment(t *testing.T) {
 	x, y := Curve.ScalarBaseMult(big.NewInt(123456).Bytes())
-	H := Point{x, y}
+	H := ECPoint{x, y}
 
 	proof, commitment, prv, err := CreatePedersenCommitment(H, 10, 5)
 	if err != nil {
@@ -36,7 +36,7 @@ func TestPedersenCommitment(t *testing.T) {
 
 func TestPedersenCommitmentFails(t *testing.T) {
 	x, y := Curve.ScalarBaseMult(big.NewInt(123456).Bytes())
-	H := Point{x, y}
+	H := ECPoint{x, y}
 
 	_, _, _, err := CreatePedersenCommitment(H, 128, 5)
 	if err == nil {
