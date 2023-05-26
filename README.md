@@ -6,7 +6,11 @@ Example implementation of [Back-Maxwell Rangeproof](https://blockstream.com/bitc
 for creating the Pedersen commitment with corresponding proof that committed value lies in [0..2^n-1] range.   
 Use only for educational reasons. 
 
-__DO NOT USE IN PRODUCTION.__ 
+__DO NOT USE IN PRODUCTION.__
+
+<img src="./proof1.jpg" alt="Signing scheme" style="width:600px;"/>
+
+<img src="./proof2.jpg" alt="Signing scheme" style="width:600px;"/>
 
 ## Usage
 Explore [main_test.go](./main_test.go) `TestPedersenCommitment` with example of usage.
@@ -26,6 +30,6 @@ Explore [main_test.go](./main_test.go) `TestSignatureForCommitments` with exampl
 
 It uses the scheme from [Simple Schnorr Signature with Pedersen Commitment as Key](https://eprint.iacr.org/2020/061.pdf) article.
 
-<img src="./signing.jpg" alt="Signing scheme"/>
+<img src="./signing.jpg" alt="Signing scheme" style="width:600px;"/>
 
 For the decentralized systems hash message expected to be the hash of transaction outputs.
