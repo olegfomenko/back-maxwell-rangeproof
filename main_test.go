@@ -1,6 +1,7 @@
 package back_maxwell_rangeproof
 
 import (
+	"crypto/rand"
 	"fmt"
 	"math/big"
 	"strconv"
@@ -62,6 +63,68 @@ func TestSignatureForCommitments(t *testing.T) {
 	}
 
 	if err := Verify(signature, H, commitmentAlice); err != nil {
+		panic(err)
+	}
+}
+
+func TestSchnorrSignature(t *testing.T) {
+	prv, err := rand.Int(rand.Reader, Curve.Params().N)
+	if err != nil {
+		panic(err)
+	}
+
+	px, py := Curve.ScalarBaseMult(prv.Bytes())
+	message := Hash([]byte("Hello world"))
+
+	sig, err := SignSchnorr(prv, ECPoint{px, py}, message)
+	if err != nil {
+		panic(err)
+	}
+
+	if err := VerifySchnorr(sig, ECPoint{px, py}, message); err != nil {
+		panic(err)
+	}
+}
+
+func TestSchnorrSignatureAggregation(t *testing.T) {
+	prvAlice, err := rand.Int(rand.Reader, Curve.Params().N)
+	if err != nil {
+		panic(err)
+	}
+
+	x, y := Curve.ScalarBaseMult(prvAlice.Bytes())
+	pubAlice := ECPoint{x, y}
+
+	prvBob, err := rand.Int(rand.Reader, Curve.Params().N)
+	if err != nil {
+		panic(err)
+	}
+
+	x, y = Curve.ScalarBaseMult(prvBob.Bytes())
+	pubBob := ECPoint{x, y}
+
+	x, y = Curve.Add(pubAlice.X, pubAlice.Y, pubBob.X, pubBob.Y)
+	pubCombined := ECPoint{x, y}
+
+	message := Hash([]byte("Hello world"))
+
+	sigAlice, err := SignSchnorr(prvAlice, pubCombined, message)
+	if err != nil {
+		panic(err)
+	}
+
+	sigBob, err := SignSchnorr(prvBob, pubCombined, message)
+	if err != nil {
+		panic(err)
+	}
+
+	x, y = Curve.Add(sigAlice.R.X, sigAlice.R.Y, sigBob.R.X, sigBob.R.Y)
+	sigCom := SchnorrSignature{
+		S: add(sigAlice.S, sigBob.S),
+		R: ECPoint{x, y},
+	}
+
+	if err := VerifySchnorr(sigCom, pubCombined, message); err != nil {
 		panic(err)
 	}
 }

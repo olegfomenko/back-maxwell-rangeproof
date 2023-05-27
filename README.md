@@ -25,7 +25,7 @@ var Curve = secp256k1.S256()
 var Hash func(...[]byte) *big.Int = defaultHash
 ```
 
-## Signature
+## Signature (Proof of ownership)
 Explore [main_test.go](./main_test.go) `TestSignatureForCommitments` with example of signing the Pederssn commitment.
 
 It uses the scheme from [Simple Schnorr Signature with Pedersen Commitment as Key](https://eprint.iacr.org/2020/061.pdf) article.
@@ -33,3 +33,9 @@ It uses the scheme from [Simple Schnorr Signature with Pedersen Commitment as Ke
 <img src="./signing.jpg" alt="Signing scheme" style="width:600px;"/>
 
 For the decentralized systems hash message expected to be the hash of transaction outputs.
+
+## Schnorr Signature
+Explore [main_test.go](./main_test.go) `TestSchnorrSignatureAggregation` with an example of Schnorr signature. 
+It can be useful to sign the resulting C=C1-C2 commitment in transactions. 
+
+It uses the scheme from [Schnorr Signature](https://mareknarozniak.com/2021/05/25/schnorr-signature/) article.

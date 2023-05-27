@@ -35,6 +35,7 @@ func Sign(r *big.Int, a *big.Int, m *big.Int, H, C ECPoint) (Signature, error) {
 }
 
 func Verify(signature Signature, H, C ECPoint) error {
+	//TODO one hash
 	e := Hash(hashPoints(signature.R, C).Bytes(), signature.M.Bytes())
 
 	c := PedersenCommitment(H, signature.V, signature.U)
