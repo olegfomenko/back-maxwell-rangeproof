@@ -18,6 +18,7 @@ func init() {
 
 func TestBitRepresentation(t *testing.T) {
 	fmt.Println(strconv.FormatUint(17, 2))
+	fmt.Println(hexutil.Encode(bn256.Order.Bytes()))
 }
 
 func TestPedersenCommitment(t *testing.T) {

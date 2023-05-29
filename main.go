@@ -37,9 +37,13 @@ func VerifyPedersenCommitment(C *bn256.G1, proof Proof) error {
 	var R []*bn256.G1
 
 	for i := 0; i < proof.N; i++ {
+		fmt.Println("Calculating: " + fmt.Sprint(i))
 		//calculating ei = Hash(si*G - e0(Ci - 2^i*H))
 
 		siG := ScalarMul(G, proof.S[i])
+
+		fmt.Println(X(siG).String())
+		fmt.Println(Y(siG).String())
 
 		p := ScalarMul(H, pow2(i))
 		p = Sub(proof.C[i], p)
@@ -48,6 +52,7 @@ func VerifyPedersenCommitment(C *bn256.G1, proof Proof) error {
 
 		ei := hashPoints(p)
 
+		fmt.Println(ei.String())
 		R = append(R, ScalarMul(proof.C[i], ei))
 	}
 
