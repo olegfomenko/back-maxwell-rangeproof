@@ -12,6 +12,7 @@ github.com/ethereum/go-ethereum/common
 github.com/ethereum/go-ethereum/common/hexutil
 github.com/ethereum/go-ethereum/common/math
 github.com/ethereum/go-ethereum/crypto
+github.com/ethereum/go-ethereum/crypto/bn256/cloudflare
 github.com/ethereum/go-ethereum/crypto/secp256k1
 github.com/ethereum/go-ethereum/crypto/secp256k1/libsecp256k1/include
 github.com/ethereum/go-ethereum/crypto/secp256k1/libsecp256k1/src

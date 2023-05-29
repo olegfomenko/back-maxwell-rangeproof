@@ -8,103 +8,97 @@ import (
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	bn256 "github.com/ethereum/go-ethereum/crypto/bn256/cloudflare"
 )
+
+func init() {
+	_, G, _ = bn256.RandomG1(rand.Reader)
+	_, H, _ = bn256.RandomG1(rand.Reader)
+}
 
 func TestBitRepresentation(t *testing.T) {
 	fmt.Println(strconv.FormatUint(17, 2))
 }
 
 func TestPedersenCommitment(t *testing.T) {
-	x, y := Curve.ScalarBaseMult(big.NewInt(123456).Bytes())
-	H := ECPoint{x, y}
-
-	proof, commitment, prv, err := CreatePedersenCommitment(H, 10, 5)
+	proof, commitment, prv, err := CreatePedersenCommitment(10, 5)
 	if err != nil {
 		panic(err)
 	}
 
-	reconstructedCommitment := PedersenCommitment(H, big.NewInt(10), prv)
+	reconstructedCommitment := PedersenCommitment(big.NewInt(10), prv)
 	fmt.Println("Constructed commitment with prv key: " + reconstructedCommitment.String())
 	fmt.Println("Response commitment: " + commitment.String())
 
 	fmt.Println("Private Key: " + hexutil.Encode(prv.Bytes()))
 
-	if err = VerifyPedersenCommitment(H, commitment, proof); err != nil {
+	if err = VerifyPedersenCommitment(commitment, proof); err != nil {
 		panic(err)
 	}
 }
 
 func TestPedersenCommitmentFails(t *testing.T) {
-	x, y := Curve.ScalarBaseMult(big.NewInt(123456).Bytes())
-	H := ECPoint{x, y}
-
-	_, _, _, err := CreatePedersenCommitment(H, 128, 5)
+	_, _, _, err := CreatePedersenCommitment(128, 5)
 	if err == nil {
 		panic("Should fail")
 	}
 }
 
 func TestSignatureForCommitments(t *testing.T) {
-	x, y := Curve.ScalarBaseMult(big.NewInt(123456).Bytes())
-	H := ECPoint{x, y}
-
-	proofAlice, commitmentAlice, keyAlice, err := CreatePedersenCommitment(H, 10, 5)
+	proofAlice, commitmentAlice, keyAlice, err := CreatePedersenCommitment(10, 5)
 	if err != nil {
 		panic(err)
 	}
 
-	if err := VerifyPedersenCommitment(H, commitmentAlice, proofAlice); err != nil {
+	if err := VerifyPedersenCommitment(commitmentAlice, proofAlice); err != nil {
 		panic(err)
 	}
 
-	signature, err := Sign(keyAlice, big.NewInt(10), Hash([]byte("12345")), H, commitmentAlice)
+	signature, err := Sign(keyAlice, big.NewInt(10), Hash([]byte("12345")), commitmentAlice)
 	if err != nil {
 		panic(err)
 	}
 
-	if err := Verify(signature, H, commitmentAlice); err != nil {
+	if err := Verify(signature, commitmentAlice); err != nil {
 		panic(err)
 	}
 }
 
 func TestSchnorrSignature(t *testing.T) {
-	prv, err := rand.Int(rand.Reader, Curve.Params().N)
+	prv, err := rand.Int(rand.Reader, bn256.Order)
 	if err != nil {
 		panic(err)
 	}
 
-	px, py := Curve.ScalarBaseMult(prv.Bytes())
+	pk := ScalarMul(G, prv)
 	message := Hash([]byte("Hello world"))
 
-	sig, err := SignSchnorr(prv, ECPoint{px, py}, message)
+	sig, err := SignSchnorr(prv, pk, message)
 	if err != nil {
 		panic(err)
 	}
 
-	if err := VerifySchnorr(sig, ECPoint{px, py}, message); err != nil {
+	if err := VerifySchnorr(sig, pk, message); err != nil {
 		panic(err)
 	}
 }
 
 func TestSchnorrSignatureAggregation(t *testing.T) {
-	prvAlice, err := rand.Int(rand.Reader, Curve.Params().N)
+	prvAlice, err := rand.Int(rand.Reader, bn256.Order)
 	if err != nil {
 		panic(err)
 	}
 
-	x, y := Curve.ScalarBaseMult(prvAlice.Bytes())
-	pubAlice := ECPoint{x, y}
+	pubAlice := ScalarMul(G, prvAlice)
 
-	prvBob, err := rand.Int(rand.Reader, Curve.Params().N)
+	prvBob, err := rand.Int(rand.Reader, bn256.Order)
 	if err != nil {
 		panic(err)
 	}
 
-	x, y = Curve.ScalarBaseMult(prvBob.Bytes())
-	pubBob := ECPoint{x, y}
+	pubBob := ScalarMul(G, prvBob)
 
-	x, y = Curve.Add(pubAlice.X, pubAlice.Y, pubBob.X, pubBob.Y)
-	pubCombined := ECPoint{x, y}
+	pubCombined := Add(pubAlice, pubBob)
 
 	message := Hash([]byte("Hello world"))
 
@@ -118,10 +112,10 @@ func TestSchnorrSignatureAggregation(t *testing.T) {
 		panic(err)
 	}
 
-	x, y = Curve.Add(sigAlice.R.X, sigAlice.R.Y, sigBob.R.X, sigBob.R.Y)
+	rCom := Add(sigAlice.R, sigBob.R)
 	sigCom := SchnorrSignature{
 		S: add(sigAlice.S, sigBob.S),
-		R: ECPoint{x, y},
+		R: rCom,
 	}
 
 	if err := VerifySchnorr(sigCom, pubCombined, message); err != nil {

@@ -1,30 +1,33 @@
 package back_maxwell_rangeproof
 
 import (
+	"bytes"
 	"crypto/rand"
 	"errors"
 	"math/big"
+
+	bn256 "github.com/ethereum/go-ethereum/crypto/bn256/cloudflare"
 )
 
 type Signature struct {
-	R ECPoint
+	R *bn256.G1
 	U *big.Int
 	V *big.Int
 	M *big.Int
 }
 
-func Sign(r *big.Int, a *big.Int, m *big.Int, H, C ECPoint) (Signature, error) {
-	k1, err := rand.Int(rand.Reader, Curve.Params().N)
+func Sign(r *big.Int, a *big.Int, m *big.Int, C *bn256.G1) (Signature, error) {
+	k1, err := rand.Int(rand.Reader, bn256.Order)
 	if err != nil {
 		return Signature{}, err
 	}
 
-	k2, err := rand.Int(rand.Reader, Curve.Params().N)
+	k2, err := rand.Int(rand.Reader, bn256.Order)
 	if err != nil {
 		return Signature{}, err
 	}
 
-	R := PedersenCommitment(H, k2, k1)
+	R := PedersenCommitment(k2, k1)
 
 	e := Hash(hashPoints(R, C).Bytes(), m.Bytes())
 
@@ -34,15 +37,16 @@ func Sign(r *big.Int, a *big.Int, m *big.Int, H, C ECPoint) (Signature, error) {
 	return Signature{R, u, v, m}, nil
 }
 
-func Verify(signature Signature, H, C ECPoint) error {
+func Verify(signature Signature, C *bn256.G1) error {
 	//TODO one hash
 	e := Hash(hashPoints(signature.R, C).Bytes(), signature.M.Bytes())
 
-	c := PedersenCommitment(H, signature.V, signature.U)
-	x, y := Curve.ScalarMult(C.X, C.Y, e.Bytes())
-	x, y = Curve.Add(x, y, signature.R.X, signature.R.Y)
+	c := PedersenCommitment(signature.V, signature.U)
 
-	if c.X.Cmp(x) != 0 || c.Y.Cmp(y) != 0 {
+	p := ScalarMul(C, e)
+	p = Add(p, signature.R)
+
+	if !bytes.Equal(p.Marshal(), c.Marshal()) {
 		return errors.New("verification failed")
 	}
 

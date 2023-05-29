@@ -4,6 +4,8 @@
 
 Example implementation of [Back-Maxwell Rangeproof](https://blockstream.com/bitcoin17-final41.pdf) on Go 
 for creating the Pedersen commitment with corresponding proof that committed value lies in [0..2^n-1] range.   
+The implementation uses Ethereum bn128 G1 curve to produce commitments and proofs. 
+
 Use only for educational reasons. 
 
 __DO NOT USE IN PRODUCTION.__
@@ -18,8 +20,8 @@ Explore [main_test.go](./main_test.go) `TestPedersenCommitment` with example of 
 Note, that there are the following values defined in global space to be changed on your choice:
 
 ```go
-// Curve - the curve we are working on
-var Curve = secp256k1.S256()
+var G *bn256.G1
+var H *bn256.G1
 
 // Hash function that should return the value in Curve.N field
 var Hash func(...[]byte) *big.Int = defaultHash

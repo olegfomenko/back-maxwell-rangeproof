@@ -1,6 +1,7 @@
 package back_maxwell_rangeproof
 
 import (
+	"bytes"
 	"crypto/rand"
 	"errors"
 	"fmt"
@@ -8,72 +9,46 @@ import (
 	"strconv"
 
 	eth "github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/crypto/secp256k1"
+	bn256 "github.com/ethereum/go-ethereum/crypto/bn256/cloudflare"
 )
-
-// Curve - the curve we are working on
-var Curve = secp256k1.S256()
 
 // Hash function that should return the value in Curve.N field
 var Hash func(...[]byte) *big.Int = defaultHash
 
 // defaultHash - default hash function Keccak256
 func defaultHash(bytes ...[]byte) *big.Int {
-	return new(big.Int).Mod(new(big.Int).SetBytes(eth.Keccak256(bytes...)), Curve.Params().N)
-}
-
-type ECPoint struct {
-	X, Y *big.Int
-}
-
-func (p *ECPoint) String() string {
-	return fmt.Sprintf("Elliptic ECPoint[x: %s | y: %s]", p.X.String(), p.Y.String())
+	return new(big.Int).Mod(new(big.Int).SetBytes(eth.Keccak256(bytes...)), bn256.Order)
 }
 
 type Proof struct {
 	E0 *big.Int
-	C  []ECPoint
+	C  []*bn256.G1
 	S  []*big.Int
 	N  int
 }
 
-// PedersenCommitment creates ECPoint with pedersen commitment aH + rG
-func PedersenCommitment(H ECPoint, a, r *big.Int) ECPoint {
-	aHx, aHy := Curve.ScalarMult(H.X, H.Y, a.Bytes())
-	rGx, rGY := Curve.ScalarBaseMult(r.Bytes())
-
-	x, y := Curve.Add(aHx, aHy, rGx, rGY)
-	return ECPoint{
-		X: x,
-		Y: y,
-	}
+// PedersenCommitment creates *bn256.G1 with pedersen commitment aH + rG
+func PedersenCommitment(a, r *big.Int) *bn256.G1 {
+	return Add(ScalarMul(H, a), ScalarMul(G, r))
 }
 
 // VerifyPedersenCommitment - verifies proof that C commitment commits the value in [0..2^n-1]
-func VerifyPedersenCommitment(H ECPoint, C ECPoint, proof Proof) error {
-	var R []ECPoint
+func VerifyPedersenCommitment(C *bn256.G1, proof Proof) error {
+	var R []*bn256.G1
 
 	for i := 0; i < proof.N; i++ {
-		fmt.Println("eCalculating for " + fmt.Sprint(i))
-
 		//calculating ei = Hash(si*G - e0(Ci - 2^i*H))
-		x, y := Curve.ScalarBaseMult(proof.S[i].Bytes())
-		siG := ECPoint{x, y}
 
-		fmt.Println("Si*G " + x.String() + " " + y.String())
+		siG := ScalarMul(G, proof.S[i])
 
-		x, y = Curve.ScalarMult(H.X, H.Y, minus(pow2(i)).Bytes())
-		x, y = Curve.Add(proof.C[i].X, proof.C[i].Y, x, y)
-		x, y = Curve.ScalarMult(x, y, minus(proof.E0).Bytes())
-		x, y = Curve.Add(x, y, siG.X, siG.Y)
+		p := ScalarMul(H, pow2(i))
+		p = Sub(proof.C[i], p)
+		p = ScalarMul(p, proof.E0)
+		p = Sub(siG, p)
 
-		fmt.Println("ei data " + x.String() + " " + y.String())
-		ei := hashPoints(ECPoint{x, y})
+		ei := hashPoints(p)
 
-		fmt.Println("ei " + ei.String())
-
-		x, y = Curve.ScalarMult(proof.C[i].X, proof.C[i].Y, ei.Bytes())
-		R = append(R, ECPoint{x, y})
+		R = append(R, ScalarMul(proof.C[i], ei))
 	}
 
 	// eo_ = Hash(Ro||R1||...Rn-1)
@@ -82,16 +57,15 @@ func VerifyPedersenCommitment(H ECPoint, C ECPoint, proof Proof) error {
 	fmt.Println("E0: " + e0_.String())
 
 	// C = sum(Ci)
-	x, y := proof.C[0].X, proof.C[0].Y
+	Com := proof.C[0]
 	for i := 1; i < proof.N; i++ {
-		x, y = Curve.Add(x, y, proof.C[i].X, proof.C[i].Y)
+		Com = Add(Com, proof.C[i])
 	}
 
 	if e0_.Cmp(proof.E0) != 0 {
 		return errors.New("e0 != e0_")
 	}
-
-	if C.X.Cmp(x) != 0 || C.Y.Cmp(y) != 0 {
+	if !bytes.Equal(C.Marshal(), Com.Marshal()) {
 		return errors.New("C != sum(Ci)")
 	}
 
@@ -101,7 +75,7 @@ func VerifyPedersenCommitment(H ECPoint, C ECPoint, proof Proof) error {
 // CreatePedersenCommitment - creates Pedersen commitment for given val, and
 // generates proof that given val lies in [0..2^n-1].
 // Returns Proof, generated commitment and private key in case of success generation.
-func CreatePedersenCommitment(H ECPoint, val uint64, n int) (Proof, ECPoint, *big.Int, error) {
+func CreatePedersenCommitment(val uint64, n int) (Proof, *bn256.G1, *big.Int, error) {
 	// Converting into bit representation
 	bitsStr := strconv.FormatUint(val, 2)
 	var bits []bool
@@ -110,7 +84,7 @@ func CreatePedersenCommitment(H ECPoint, val uint64, n int) (Proof, ECPoint, *bi
 	}
 
 	if len(bits) > n {
-		return Proof{}, ECPoint{}, nil, errors.New("invalid value: greater then 2^n - 1")
+		return Proof{}, nil, nil, errors.New("invalid value: greater then 2^n - 1")
 	}
 
 	// Adding leading zeros
@@ -122,56 +96,49 @@ func CreatePedersenCommitment(H ECPoint, val uint64, n int) (Proof, ECPoint, *bi
 	var r []*big.Int
 	var k []*big.Int
 
-	var R []ECPoint
-	var C []ECPoint
+	var R []*bn256.G1
+	var C []*bn256.G1
 
 	for i := 0; i < n; i++ {
 		if bits[i] {
-			ri, err := rand.Int(rand.Reader, Curve.Params().N)
+			ri, err := rand.Int(rand.Reader, bn256.Order)
 			if err != nil {
-				return Proof{}, ECPoint{}, nil, err
+				return Proof{}, nil, nil, err
 			}
 			prv = add(prv, ri)
 			r = append(r, ri)
 
 			// Ci = Com(2^i, ri)
-			Ci := PedersenCommitment(H, pow2(i), ri)
+			Ci := PedersenCommitment(pow2(i), ri)
 			C = append(C, Ci)
 
-			ki, err := rand.Int(rand.Reader, Curve.Params().N)
+			ki, err := rand.Int(rand.Reader, bn256.Order)
 			if err != nil {
-				return Proof{}, ECPoint{}, nil, err
+				return Proof{}, nil, nil, err
 			}
 			k = append(k, ki)
 
 			// Hash(ki*G)
-			x, y := Curve.ScalarBaseMult(ki.Bytes())
-			ei := hashPoints(ECPoint{x, y})
+			kiG := ScalarMul(G, ki)
+			ei := hashPoints(kiG)
 
 			// Ri = Hash(ki*G)*Ci
-			x, y = Curve.ScalarMult(Ci.X, Ci.Y, ei.Bytes())
-			R = append(R, ECPoint{
-				X: x,
-				Y: y,
-			})
+
+			R = append(R, ScalarMul(Ci, ei))
 			continue
 		}
 
-		ki0, err := rand.Int(rand.Reader, Curve.Params().N)
+		ki0, err := rand.Int(rand.Reader, bn256.Order)
 		if err != nil {
-			return Proof{}, ECPoint{}, nil, err
+			return Proof{}, nil, nil, err
 		}
 		k = append(k, ki0)
 
 		// Ri = ki0*G
-		x, y := Curve.ScalarBaseMult(ki0.Bytes())
-		R = append(R, ECPoint{
-			X: x,
-			Y: y,
-		})
+		R = append(R, ScalarMul(G, ki0))
 
 		// will be initialized later
-		C = append(C, ECPoint{})
+		C = append(C, nil)
 		// just placing nil value to be able to get corresponding r[i] for bit == 1 in future
 		r = append(r, nil)
 	}
@@ -189,18 +156,17 @@ func CreatePedersenCommitment(H ECPoint, val uint64, n int) (Proof, ECPoint, *bi
 			continue
 		}
 
-		ki, err := rand.Int(rand.Reader, Curve.Params().N)
+		ki, err := rand.Int(rand.Reader, bn256.Order)
 		if err != nil {
-			return Proof{}, ECPoint{}, nil, err
+			return Proof{}, nil, nil, err
 		}
 
 		// ei = Hash(ki*G + e0*2^i*H)
-		ei := hashPoints(PedersenCommitment(H, mul(e0, pow2(i)), ki))
+		ei := hashPoints(PedersenCommitment(mul(e0, pow2(i)), ki))
 
 		// Ci = Ri /ei = (ki0/ei)*G
-		ei_inverse := new(big.Int).ModInverse(ei, Curve.Params().N)
-		x, y := Curve.ScalarMult(R[i].X, R[i].Y, ei_inverse.Bytes())
-		C[i] = ECPoint{x, y}
+		ei_inverse := new(big.Int).ModInverse(ei, bn256.Order)
+		C[i] = ScalarMul(R[i], ei_inverse)
 
 		prv = add(prv, mul(k[i], ei_inverse))
 
@@ -209,9 +175,9 @@ func CreatePedersenCommitment(H ECPoint, val uint64, n int) (Proof, ECPoint, *bi
 		s = append(s, si)
 	}
 
-	x, y := C[0].X, C[0].Y
+	Com := C[0]
 	for i := 1; i < n; i++ {
-		x, y = Curve.Add(x, y, C[i].X, C[i].Y)
+		Com = Add(Com, C[i])
 	}
 
 	return Proof{
@@ -220,32 +186,32 @@ func CreatePedersenCommitment(H ECPoint, val uint64, n int) (Proof, ECPoint, *bi
 			S:  s,
 			N:  n,
 		},
-		ECPoint{x, y},
+		Com,
 		prv,
 		nil
 }
 
 func add(x *big.Int, y *big.Int) *big.Int {
-	return new(big.Int).Mod(new(big.Int).Add(x, y), Curve.Params().N)
+	return new(big.Int).Mod(new(big.Int).Add(x, y), bn256.Order)
 }
 
 func mul(x *big.Int, y *big.Int) *big.Int {
-	return new(big.Int).Mod(new(big.Int).Mul(x, y), Curve.Params().N)
+	return new(big.Int).Mod(new(big.Int).Mul(x, y), bn256.Order)
 }
 
 func pow2(i int) *big.Int {
-	return new(big.Int).Exp(big.NewInt(2), big.NewInt(int64(i)), Curve.Params().N)
+	return new(big.Int).Exp(big.NewInt(2), big.NewInt(int64(i)), bn256.Order)
 }
 
 func minus(val *big.Int) *big.Int {
-	return new(big.Int).Mod(new(big.Int).Mul(val, big.NewInt(-1)), Curve.Params().N)
+	return new(big.Int).Mod(new(big.Int).Mul(val, big.NewInt(-1)), bn256.Order)
 }
 
-func hashPoints(points ...ECPoint) *big.Int {
+func hashPoints(points ...*bn256.G1) *big.Int {
 	var data [][]byte
 	for _, p := range points {
-		data = append(data, p.X.Bytes())
-		data = append(data, p.Y.Bytes())
+		data = append(data, X(p).Bytes())
+		data = append(data, Y(p).Bytes())
 	}
 
 	return Hash(data...)

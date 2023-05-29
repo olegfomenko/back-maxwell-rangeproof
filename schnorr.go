@@ -1,40 +1,44 @@
 package back_maxwell_rangeproof
 
 import (
+	"bytes"
 	"crypto/rand"
 	"errors"
 	"math/big"
+
+	bn256 "github.com/ethereum/go-ethereum/crypto/bn256/cloudflare"
 )
 
 type SchnorrSignature struct {
-	R ECPoint
+	R *bn256.G1
 	S *big.Int
 }
 
-func SignSchnorr(prv *big.Int, publicKey ECPoint, m *big.Int) (SchnorrSignature, error) {
-	k, err := rand.Int(rand.Reader, Curve.Params().N)
+func SignSchnorr(prv *big.Int, publicKey *bn256.G1, m *big.Int) (SchnorrSignature, error) {
+	k, err := rand.Int(rand.Reader, bn256.Order)
 	if err != nil {
 		return SchnorrSignature{}, err
 	}
 
-	x, y := Curve.ScalarBaseMult(k.Bytes())
-	hash := Hash(m.Bytes(), publicKey.X.Bytes(), publicKey.Y.Bytes())
+	kG := ScalarMul(G, k)
+	hash := Hash(m.Bytes(), X(publicKey).Bytes(), Y(publicKey).Bytes())
 	s := add(k, minus(mul(hash, prv)))
 
 	return SchnorrSignature{
-		R: ECPoint{x, y},
+		R: kG,
 		S: s,
 	}, nil
 }
 
-func VerifySchnorr(sig SchnorrSignature, publicKey ECPoint, m *big.Int) error {
-	hash := Hash(m.Bytes(), publicKey.X.Bytes(), publicKey.Y.Bytes())
-	x1, y1 := Curve.ScalarMult(publicKey.X, publicKey.Y, minus(hash).Bytes())
-	x1, y1 = Curve.Add(x1, y1, sig.R.X, sig.R.Y)
+func VerifySchnorr(sig SchnorrSignature, publicKey *bn256.G1, m *big.Int) error {
+	hash := Hash(m.Bytes(), X(publicKey).Bytes(), Y(publicKey).Bytes())
 
-	x2, y2 := Curve.ScalarBaseMult(sig.S.Bytes())
+	p1 := ScalarMul(publicKey, hash)
+	p1 = Sub(sig.R, p1)
 
-	if x1.Cmp(x2) != 0 || y1.Cmp(y2) != 0 {
+	p2 := ScalarMul(G, sig.S)
+
+	if !bytes.Equal(p1.Marshal(), p2.Marshal()) {
 		return errors.New("verification failed")
 	}
 
