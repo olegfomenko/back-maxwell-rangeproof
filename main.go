@@ -54,15 +54,23 @@ func VerifyPedersenCommitment(H ECPoint, C ECPoint, proof Proof) error {
 	var R []ECPoint
 
 	for i := 0; i < proof.N; i++ {
+		fmt.Println("eCalculating for " + fmt.Sprint(i))
+
 		//calculating ei = Hash(si*G - e0(Ci - 2^i*H))
 		x, y := Curve.ScalarBaseMult(proof.S[i].Bytes())
 		siG := ECPoint{x, y}
+
+		fmt.Println("Si*G " + x.String() + " " + y.String())
 
 		x, y = Curve.ScalarMult(H.X, H.Y, minus(pow2(i)).Bytes())
 		x, y = Curve.Add(proof.C[i].X, proof.C[i].Y, x, y)
 		x, y = Curve.ScalarMult(x, y, minus(proof.E0).Bytes())
 		x, y = Curve.Add(x, y, siG.X, siG.Y)
+
+		fmt.Println("ei data " + x.String() + " " + y.String())
 		ei := hashPoints(ECPoint{x, y})
+
+		fmt.Println("ei " + ei.String())
 
 		x, y = Curve.ScalarMult(proof.C[i].X, proof.C[i].Y, ei.Bytes())
 		R = append(R, ECPoint{x, y})
@@ -70,6 +78,8 @@ func VerifyPedersenCommitment(H ECPoint, C ECPoint, proof Proof) error {
 
 	// eo_ = Hash(Ro||R1||...Rn-1)
 	e0_ := hashPoints(R...)
+
+	fmt.Println("E0: " + e0_.String())
 
 	// C = sum(Ci)
 	x, y := proof.C[0].X, proof.C[0].Y
