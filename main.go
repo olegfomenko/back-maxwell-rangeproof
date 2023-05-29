@@ -54,6 +54,9 @@ func VerifyPedersenCommitment(C *bn256.G1, proof Proof) error {
 
 		fmt.Println(ei.String())
 		R = append(R, ScalarMul(proof.C[i], ei))
+
+		fmt.Println(X(R[i]).String())
+		fmt.Println(Y(R[i]).String())
 	}
 
 	// eo_ = Hash(Ro||R1||...Rn-1)
