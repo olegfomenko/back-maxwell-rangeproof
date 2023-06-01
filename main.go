@@ -16,7 +16,12 @@ var Hash func(...[]byte) *big.Int = defaultHash
 
 // defaultHash - default hash function Keccak256
 func defaultHash(bytes ...[]byte) *big.Int {
-	return new(big.Int).Mod(new(big.Int).SetBytes(eth.Keccak256(bytes...)), bn256.Order)
+	data := make([][]byte, 0, len(bytes))
+	for _, b := range bytes {
+		data = append(data, uint256Bytes(b))
+	}
+
+	return new(big.Int).Mod(new(big.Int).SetBytes(eth.Keccak256(data...)), bn256.Order)
 }
 
 type Proof struct {
@@ -211,4 +216,11 @@ func hashPoints(points ...*bn256.G1) *big.Int {
 	}
 
 	return Hash(data...)
+}
+
+func uint256Bytes(val []byte) []byte {
+	for len(val) < 32 {
+		val = append([]byte{0}, val...)
+	}
+	return val
 }
