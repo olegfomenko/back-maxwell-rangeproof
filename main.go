@@ -4,11 +4,9 @@ import (
 	"bytes"
 	"crypto/rand"
 	"errors"
-	"fmt"
 	"math/big"
 	"strconv"
 
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	eth "github.com/ethereum/go-ethereum/crypto"
 	bn256 "github.com/ethereum/go-ethereum/crypto/bn256/cloudflare"
 )
@@ -20,9 +18,7 @@ var Hash func(...[]byte) *big.Int = defaultHash
 func defaultHash(bytes ...[]byte) *big.Int {
 	data := make([][]byte, 0, len(bytes))
 	for _, b := range bytes {
-		fmt.Println("was " + hexutil.Encode(b))
 		data = append(data, uint256Bytes(b))
-		fmt.Println("now " + hexutil.Encode(uint256Bytes(b)))
 	}
 
 	return new(big.Int).Mod(new(big.Int).SetBytes(eth.Keccak256(data...)), bn256.Order)
